@@ -1,0 +1,159 @@
+---
+title: "Basic Correlation"
+output: html_notebook
+author: Margaret Paiva
+date: 3/1/2023
+---
+
+```{r}
+# Load libraries
+x <- c('dplyr',
+       'reshape2',
+       'ggplot2',
+       'ggpubr',
+       'GGally')
+lapply(x, require, character.only = TRUE)
+```
+
+```{r}
+# Read data
+dat <- read.csv("./dataset.csv")
+```
+
+## 1. Plot the relationship between the first two columns
+```{r}
+# Plot the relationship between the first two columns
+ggplot(dat, aes(x = Var1, y = Var2)) +
+  geom_point() +
+  geom_smooth(method = "lm",
+              se = FALSE,
+              formula = y ~ x) +
+  stat_regline_equation(aes(label = after_stat(eq.label)),
+                        label.y = 1.1) +
+  stat_cor(
+    aes(label = after_stat(r.label)),
+    label.y = 0.9,
+    method = "pearson",
+    na.rm = TRUE
+  ) +
+  ggtitle("Relationship between the first two columns")
+```
+
+## 2. The Pearson correlation coefficient between the first two columns
+```{r}
+r12 <- cor(dat$Var1, dat$Var2, method = 'pearson')
+print(paste0('The Pearson correlation coefficient between the first two columns is ', r12, '.'))
+```
+
+## 3. The Pearson correlation coefficient between the second and the third columns
+
+```{r}
+r23 <- cor(dat$Var2, dat$Var3, method = 'pearson', use = 'na.or.complete') 
+print(paste0('The Pearson correlation coefficient between the second and the third columns is ', r23, '.'))
+```
+
+## 4. Which two columns in the dataset are the most related?
+## 5. And generate  the appropriate visual display
+```{r}
+ggpairs(dat, 
+        progress = FALSE, 
+        upper = list(continuous = wrap("cor", size = 3))) + # corr font size
+  theme(axis.text.x = element_text(angle =45, hjust = 1, size = 4),
+        axis.text.y = element_text(size = 4)) # label font size
+```
+
+I think this is one of the best ways to visualize the pairwise relationships in multivariate data. The plot shows the scatter plots in the lower left triangle and the Pearson correlation coefficients in the upper right triangle. The more asterisks each correlation has, the more significant the correlation is. The figure only needs half of the matrix to display each function because the correlation between Var1 and Var2 is the same as the correlation between Var2 and Var1. The diagonal values would all be ones if they were correlation coefficients. Therefore, the diagonal portion is used to plot the density of each variable. 
+
+```{r}
+# We can use the above figure or the following way to find the most related variables
+
+# Build a correlation matrix with correlations of all pairs of columns
+cormat <- cor(dat, method = 'pearson',
+              use = 'na.or.complete')
+```
+
+```{r}
+max(abs(cormat) %>% `diag<-`(., 0)) # max corr between DIFFERENT variables
+```
+
+We can also visualize this correlation matrix. 
+```{r}
+# We do not need the whole matrix because the correlation between Var1 and Var2 is the same as the correlation between Var2 and Var1. Therefore, we can use the following function to extract half of the matrix.
+
+#* Get a lower triangle of a matrix
+#* @cormat matrix or dataframe serving as a full matrix
+get_lower_tri <- function(cormat) {
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+
+# Get a triangle portion of the correlation matrix
+lower_tri <- get_lower_tri(cormat)
+```
+
+```{r}
+# Format the matrix for plotting
+melted_cormat <- melt(lower_tri, na.rm = TRUE) %>% 
+  rename(Dim1 = Var1, Dim2 = Var2) # Rename columns to avoid confusion with the original column names
+```
+
+```{r}
+# Plot the correlation matrix
+ggplot(data = melted_cormat, aes(Dim1, Dim2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab",
+                       name="Correlation") +
+  theme_minimal() + 
+  coord_fixed() +
+  geom_text(aes(Dim1, Dim2, label = round(value, 2)), 
+            color = "black", size = 3)+
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, # avoid overlapping
+                               size = 10, hjust = 1),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank()) +
+    guides(
+      fill = guide_colorbar(barwidth = 1, barheight = 8,
+                            title.position = "top", 
+                            title.hjust = 0.5)) +
+  ggtitle("Pearson correlation coefficients between columns")
+```
+**Therefore, the highest correlated variables are Var1 and Var6. Notice the two highest related variables are inversely correlated.** If the question is to only find the highest positive correlation, then one should only consider the pairs with positive correlation coefficients (Var1 and Var9).
+
+## 6. What's the equation of the best-fit line between the two most related columns?
+**Again, the most related columns considered here are the most related regardless of whether the relationship is positive or inverse.**
+```{r}
+m6 <- lm(dat$Var6 ~ dat$Var1)
+m1 <- lm(dat$Var1 ~ dat$Var6)
+print(paste0("The equation of the best-fit line between Var6 and Var1 is Var6 = ", 
+             signif(m6$coefficients[1], 2), 
+             signif(m6$coefficients[2], 2), 
+             "*Var1, or alternatively, Var1 = ", 
+             signif(m1$coefficients[1], 2), 
+             signif(m1$coefficients[2], 2), "*Var6."))
+```
+
+## 7. Plot the two most related columns and annotate it with the best fit line, its equation, and the Pearson's correlation coefficient.
+```{r}
+# Plot the relationship between the first two columns
+ggplot(dat, aes(x = Var1, y = Var6)) +
+  geom_point() +
+  geom_smooth(method = "lm",
+              se = FALSE,
+              formula = y ~ x) +
+  stat_regline_equation(aes(label = after_stat(eq.label)),
+                        label.y = 1.1) +
+  stat_cor(
+    aes(label = after_stat(r.label)),
+    label.y = 0.9,
+    method = "pearson",
+    na.rm = TRUE
+  ) +
+  ggtitle("Relationship between the most related columns")
+```
+
